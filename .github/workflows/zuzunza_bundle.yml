@@ -1,0 +1,37 @@
+name: Zuzunza web bundle
+
+on:
+  push:
+    branches: [zuzunza/develop]
+  workflow_dispatch:
+
+concurrency:
+  group: zuzunza-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: zuzunza-web
+
+      - name: Build ruffle_web (release)
+        run: cargo build -p ruffle_web --release --target wasm32-unknown-unknown
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zuzunza-ruffle-wasm
+          path: |
+            target/wasm32-unknown-unknown/release/ruffle_web.wasm
+          if-no-files-found: error

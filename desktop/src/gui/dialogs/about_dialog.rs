@@ -5,7 +5,7 @@ use unic_langid::LanguageIdentifier;
 
 const VERGEN_UNKNOWN: &str = "VERGEN_IDEMPOTENT_OUTPUT";
 
-/// Renders the About Ruffle dialog.
+/// Renders the About Zuzunza Player dialog.
 pub fn show_about_dialog(locale: &LanguageIdentifier, egui_ctx: &egui::Context) -> bool {
     let mut keep_open = true;
 
@@ -73,11 +73,11 @@ pub fn show_about_dialog(locale: &LanguageIdentifier, egui_ctx: &egui::Context) 
                 ui.horizontal(|ui| {
                     ui.hyperlink_to(
                         text(locale, "about-ruffle-visit-website"),
-                        "https://ruffle.rs",
+                        "https://www.zuzunza.com",
                     );
                     ui.hyperlink_to(
                         text(locale, "about-ruffle-visit-github"),
-                        "https://github.com/ruffle-rs/ruffle/",
+                        "https://www.zuzunza.com",
                     );
                     ui.hyperlink_to(
                         text(locale, "about-ruffle-visit-discord"),
