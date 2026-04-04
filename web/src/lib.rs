@@ -144,6 +144,8 @@ struct RuffleInstance {
     trace_observer: Rc<RefCell<JsValue>>,
     log_subscriber: Arc<Layered<WASMLayer, Registry>>,
     pressed_buttons: Vec<GamepadButton>,
+    zetenc_radius: Option<f64>,
+    zetenc_seed: Option<String>,
 }
 
 #[wasm_bindgen(raw_module = "./internal/player/inner")]
@@ -285,8 +287,22 @@ impl RuffleHandle {
             segments.push(&swf_name);
         }
 
+        let mut data = swf_data.to_vec();
+        let zetenc: Option<(f64, String)> = self.with_instance(|instance| {
+            match (instance.zetenc_radius, &instance.zetenc_seed) {
+                (Some(r), Some(s)) if !s.is_empty() => Some((*r, s.clone())),
+                _ => None,
+            }
+        })
+        .flatten();
+        if let Some((r, s)) = zetenc {
+            data = zuzunza_zetenc::decrypt_if_zet(&data, r, &s).map_err(|e| {
+                JsValue::from_str(&format!("ZetEnc: {e}"))
+            })?;
+        }
+
         let mut movie =
-            SwfMovie::from_data(&swf_data.to_vec(), url.to_string(), None).map_err(|e| {
+            SwfMovie::from_data(&data, url.to_string(), None).map_err(|e| {
                 let _ = self.with_core_mut(|core| {
                     core.ui_mut()
                         .display_root_movie_download_failed_message(true, e.to_string());
@@ -539,6 +555,8 @@ impl RuffleHandle {
             trace_observer: player.trace_observer,
             log_subscriber,
             pressed_buttons: vec![],
+            zetenc_radius: config.zetenc_radius,
+            zetenc_seed: config.zetenc_seed.clone(),
         };
 
         // Prevent touch-scrolling on canvas.

@@ -789,6 +789,27 @@ export interface BaseLoadOptions {
      * @default DeviceFontRenderer.Embedded
      */
     deviceFontRenderer?: DeviceFontRenderer;
+
+    /**
+     * ZetEnc radius (must match `wscp-library/zetenc` / proxy). Use with {@link zetencSeed}.
+     * When both are set, fetched or embedded SWF payloads with the `ZET` magic prefix are decrypted in WASM.
+     *
+     * @experimental Zuzunza Player
+     */
+    zetencRadius?: number | null;
+
+    /**
+     * ZetEnc seed string paired with {@link zetencRadius}.
+     */
+    zetencSeed?: string | null;
+
+    /**
+     * When true, hides "Copy debug info", SWF download, and the external About link in the context menu.
+     *
+     * @experimental Zuzunza Player
+     * @default false
+     */
+    brandingLock?: boolean;
 }
 
 /**

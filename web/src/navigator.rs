@@ -58,6 +58,8 @@ pub struct WebNavigatorBackend {
     open_url_mode: OpenUrlMode,
     socket_proxies: Vec<SocketProxy>,
     credential_allow_list: Vec<String>,
+    /// When set, fetch bodies starting with `ZET` are decrypted (Zuzunza ZetEnc).
+    zetenc_config: Option<Arc<(f64, String)>>,
     player: Weak<Mutex<Player>>,
 }
 
@@ -73,6 +75,8 @@ impl WebNavigatorBackend {
         open_url_mode: OpenUrlMode,
         socket_proxies: Vec<SocketProxy>,
         credential_allow_list: Vec<String>,
+        zetenc_radius: Option<f64>,
+        zetenc_seed: Option<String>,
     ) -> Self {
         let window = web_sys::window().expect("window()");
 
@@ -107,6 +111,11 @@ impl WebNavigatorBackend {
             tracing::error!("Could not get base URL for base directory inference.");
         }
 
+        let zetenc_config = match (zetenc_radius, zetenc_seed) {
+            (Some(r), Some(s)) if !s.is_empty() => Some(Arc::new((r, s))),
+            _ => None,
+        };
+
         Self {
             allow_script_access,
             allow_networking,
@@ -117,6 +126,7 @@ impl WebNavigatorBackend {
             open_url_mode,
             socket_proxies,
             credential_allow_list,
+            zetenc_config,
             player: Weak::new(),
         }
     }
@@ -322,6 +332,8 @@ impl NavigatorBackend for WebNavigatorBackend {
             }
         };
 
+        let zetenc = self.zetenc_config.clone();
+
         let credentials = if let Some(host) = url.host_str() {
             if self
                 .credential_allow_list
@@ -423,6 +435,7 @@ impl NavigatorBackend for WebNavigatorBackend {
                 rewritten_url: None,
                 response,
                 body_stream: None,
+                zetenc,
             });
 
             Ok(wrapper)
@@ -575,6 +588,7 @@ struct WebResponseWrapper {
     rewritten_url: Option<String>,
     response: WebResponse,
     body_stream: Option<Rc<RefCell<ReadableStream>>>,
+    zetenc: Option<Arc<(f64, String)>>,
 }
 
 impl SuccessResponse for WebResponseWrapper {
@@ -604,7 +618,16 @@ impl SuccessResponse for WebResponseWrapper {
             .map_err(|_| {
                 Error::FetchError("array_buffer result wasn't an ArrayBuffer".to_string())
             })?;
-            let body = Uint8Array::new(&body).to_vec();
+            let mut body = Uint8Array::new(&body).to_vec();
+
+            if let Some(ref cfg) = self.zetenc {
+                match zuzunza_zetenc::decrypt_if_zet(&body, cfg.0, &cfg.1) {
+                    Ok(b) => body = b,
+                    Err(e) => {
+                        return Err(Error::FetchError(format!("ZetEnc decrypt failed: {e}")));
+                    }
+                }
+            }
 
             Ok(body)
         })

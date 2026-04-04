@@ -144,6 +144,13 @@ export function configureBuilder(
     if (isExplicit(config.deviceFontRenderer)) {
         builder.setDeviceFontRenderer(config.deviceFontRenderer);
     }
+
+    if (config.zetencRadius !== undefined && config.zetencRadius !== null) {
+        builder.setZetencRadius(config.zetencRadius);
+    }
+    if (config.zetencSeed !== undefined && config.zetencSeed !== null) {
+        builder.setZetencSeed(config.zetencSeed);
+    }
 }
 
 /**

@@ -66,6 +66,8 @@ pub struct RuffleInstanceBuilder {
     pub(crate) url_rewrite_rules: Vec<(RegExp, String)>,
     pub(crate) scrolling_behavior: ScrollingBehavior,
     pub(crate) device_font_renderer: DeviceFontRenderer,
+    pub(crate) zetenc_radius: Option<f64>,
+    pub(crate) zetenc_seed: Option<String>,
 }
 
 impl Default for RuffleInstanceBuilder {
@@ -106,6 +108,8 @@ impl Default for RuffleInstanceBuilder {
             url_rewrite_rules: vec![],
             scrolling_behavior: ScrollingBehavior::Smart,
             device_font_renderer: DeviceFontRenderer::Embedded,
+            zetenc_radius: None,
+            zetenc_seed: None,
         }
     }
 }
@@ -356,6 +360,18 @@ impl RuffleInstanceBuilder {
             "canvas" => DeviceFontRenderer::Canvas,
             _ => return,
         };
+    }
+
+    /// ZetEnc `radius` (must match Go `wscp-library/zetenc` and host proxy).
+    #[wasm_bindgen(js_name = "setZetencRadius")]
+    pub fn set_zetenc_radius(&mut self, value: Option<f64>) {
+        self.zetenc_radius = value;
+    }
+
+    /// ZetEnc `seed` string (paired with radius).
+    #[wasm_bindgen(js_name = "setZetencSeed")]
+    pub fn set_zetenc_seed(&mut self, value: Option<String>) {
+        self.zetenc_seed = value;
     }
 
     // TODO: This should be split into two methods that either load url or load data
@@ -653,6 +669,8 @@ impl RuffleInstanceBuilder {
             self.open_url_mode,
             self.socket_proxy.clone(),
             self.credential_allow_list.clone(),
+            self.zetenc_radius,
+            self.zetenc_seed.clone(),
         )
     }
 

@@ -1495,7 +1495,10 @@ export class InnerPlayer {
             },
         });
 
+        const brandingLock = this.loadedConfig?.brandingLock === true;
+
         if (
+            !brandingLock &&
             this.instance &&
             this.swfUrl &&
             this.loadedConfig &&
@@ -1508,7 +1511,11 @@ export class InnerPlayer {
             });
         }
 
-        if (navigator.clipboard && window.isSecureContext) {
+        if (
+            !brandingLock &&
+            navigator.clipboard &&
+            window.isSecureContext
+        ) {
             items.push({
                 text: text("context-menu-copy-debug-info"),
                 onClick: () =>

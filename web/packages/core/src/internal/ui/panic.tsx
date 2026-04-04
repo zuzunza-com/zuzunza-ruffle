@@ -1,7 +1,7 @@
 import { text, textAsParagraphs } from "../i18n";
 import { createRef } from "tsx-dom";
 import { buildInfo } from "../../build-info";
-import { RUFFLE_ORIGIN } from "../constants";
+import { ZUZUNZA_ORIGIN } from "../constants";
 import {
     InvalidOptionsError,
     InvalidSwfError,
@@ -125,19 +125,19 @@ type ErrorArray = Array<string | null> & {
 export const CommonActions = {
     OpenDemo: {
         type: "open_link",
-        url: RUFFLE_ORIGIN + "/demo",
+        url: ZUZUNZA_ORIGIN + "/games",
         label: text("ruffle-demo"),
     } as PanicAction,
 
     DownloadDesktop: {
         type: "open_link",
-        url: RUFFLE_ORIGIN + "/downloads#desktop-app",
+        url: ZUZUNZA_ORIGIN + "/",
         label: text("ruffle-desktop"),
     } as PanicAction,
 
     UpdateRuffle: {
         type: "open_link",
-        url: RUFFLE_ORIGIN + "/downloads",
+        url: ZUZUNZA_ORIGIN + "/",
         label: text("update-ruffle"),
     } as PanicAction,
 

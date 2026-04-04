@@ -58,4 +58,7 @@ export const DEFAULT_CONFIG: Required<BaseLoadOptions> = {
     urlRewriteRules: [],
     scrollingBehavior: ScrollingBehavior.Smart,
     deviceFontRenderer: DeviceFontRenderer.Embedded,
+    zetencRadius: null,
+    zetencSeed: null,
+    brandingLock: false,
 };
