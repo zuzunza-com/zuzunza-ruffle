@@ -288,13 +288,15 @@ impl RuffleHandle {
         }
 
         let mut data = swf_data.to_vec();
-        let zetenc: Option<(f64, String)> = self.with_instance(|instance| {
-            match (instance.zetenc_radius, &instance.zetenc_seed) {
-                (Some(r), Some(s)) if !s.is_empty() => Some((*r, s.clone())),
-                _ => None,
-            }
-        })
-        .flatten();
+        let zetenc: Option<(f64, String)> = self
+            .with_instance(|instance| {
+                match (instance.zetenc_radius, &instance.zetenc_seed) {
+                    (Some(r), Some(s)) if !s.is_empty() => Some((r, s.clone())),
+                    _ => None,
+                }
+            })
+            .ok()
+            .flatten();
         if let Some((r, s)) = zetenc {
             data = zuzunza_zetenc::decrypt_if_zet(&data, r, &s).map_err(|e| {
                 JsValue::from_str(&format!("ZetEnc: {e}"))
