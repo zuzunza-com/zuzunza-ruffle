@@ -231,7 +231,7 @@ export function loadJsAPI(swf?: string) {
                 player,
                 swf,
             );
-            await playAndMonitor(browser, player);
+            await playAndMonitor(browser, player as unknown as ChainablePromiseElement);
         }
     });
 }
@@ -244,7 +244,9 @@ export async function closeAllModals(
     await browser.execute(
         ({ modals }) => {
             for (const m of modals) {
-                const cl = m.querySelector(".close-modal")! as HTMLElement;
+                const cl = (m as unknown as HTMLElement).querySelector(
+                    ".close-modal",
+                )! as HTMLElement;
                 cl.click();
             }
         },

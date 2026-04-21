@@ -210,7 +210,6 @@ declare global {
     }
 }
 
-// @ts-expect-error TS2375 Undefined is the same as not specified here
 export const config: WebdriverIO.Config = {
     user,
     key,

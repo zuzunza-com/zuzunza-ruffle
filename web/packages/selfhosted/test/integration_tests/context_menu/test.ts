@@ -46,7 +46,7 @@ async function openContextMenuOnInput(player: ChainablePromiseElement) {
 async function clickContextMenuEntry(
     player: ChainablePromiseElement,
     text: string,
-    button: string = "left",
+    button: "left" | "right" | "middle" = "left",
 ) {
     const contextMenu = await player.shadow$("#context-menu");
     const item = await contextMenu.$(`.menu-item[data-text="${text}"]`);

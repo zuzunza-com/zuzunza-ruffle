@@ -1,13 +1,18 @@
 {
-    "extends": "@tsconfig/strictest/tsconfig.json",
     "compilerOptions": {
+        "strict": true,
+        "noImplicitOverride": true,
+        "noUncheckedIndexedAccess": true,
+        "noPropertyAccessFromIndexSignature": true,
         "composite": true,
         "module": "es2020",
         "moduleResolution": "node",
         "target": "es2021",
         "rootDir": ".",
         "outDir": "dist",
-        "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework", "ruffle-core"]
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "types": ["node"]
     },
-    "include": ["test/**/*", "wdio.conf.ts"],
+    "include": ["test/**/*", "wdio.conf.ts", "wdio-env.d.ts"]
 }

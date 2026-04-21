@@ -20,8 +20,8 @@ async function setDirection(
     direction: string,
 ) {
     await browser.execute(
-        ({ el, dir }: { el: HTMLElement; dir: string }) => {
-            el.dir = dir;
+        ({ el, dir }: { el: ChainablePromiseElement; dir: string }) => {
+            (el as unknown as HTMLElement).dir = dir;
         },
         { el: element, dir: direction },
     );
