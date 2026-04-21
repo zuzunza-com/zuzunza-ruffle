@@ -5,15 +5,10 @@
     "license": "(MIT OR Apache-2.0)",
     "private": true,
     "type": "module",
+    "packageManager": "pnpm@10.32.1",
     "config": {
         "detect_chromedriver_version": true
     },
-    "workspaces": [
-        "./packages/core",
-        "./packages/demo",
-        "./packages/extension",
-        "./packages/selfhosted"
-    ],
     "devDependencies": {
         "@eslint/js": "^9.39.2",
         "@wdio/browserstack-service": "^9.25.0",
@@ -49,16 +44,17 @@
         "workspace-version": "^0.1.4"
     },
     "scripts": {
-        "build": "npm run build --workspace=ruffle-core && npm run build --workspace=ruffle-demo --workspace=ruffle-extension --workspace=ruffle-selfhosted",
-        "build:debug": "cross-env NODE_ENV=development CARGO_FEATURES=avm_debug npm run build",
-        "build:dual-wasm": "cross-env BUILD_WASM_MVP=true npm run build",
-        "build:repro": "cross-env ENABLE_VERSION_SEAL=true npm run build",
-        "build:dual-wasm-repro": "cross-env BUILD_WASM_MVP=true ENABLE_VERSION_SEAL=true npm run build",
-        "demo": "npm run preview --workspace ruffle-demo",
-        "test": "npm test --workspaces --if-present",
-        "wdio": "npm run wdio --workspaces --if-present --",
-        "docs": "npm run docs --workspaces --if-present",
-        "lint": "npm run checkTypes --workspaces --if-present && eslint . && stylelint **.css",
+        "dev": "pnpm --filter ruffle-demo dev",
+        "build": "pnpm --filter ruffle-core build && pnpm --filter ruffle-demo build && pnpm --filter ruffle-extension build && pnpm --filter ruffle-selfhosted build",
+        "build:debug": "cross-env NODE_ENV=development CARGO_FEATURES=avm_debug pnpm run build",
+        "build:dual-wasm": "cross-env BUILD_WASM_MVP=true pnpm run build",
+        "build:repro": "cross-env ENABLE_VERSION_SEAL=true pnpm run build",
+        "build:dual-wasm-repro": "cross-env BUILD_WASM_MVP=true ENABLE_VERSION_SEAL=true pnpm run build",
+        "demo": "pnpm --filter ruffle-demo run preview",
+        "test": "pnpm -r run --if-present test",
+        "wdio": "pnpm -r run --if-present wdio --",
+        "docs": "pnpm -r run --if-present docs",
+        "lint": "pnpm -r run --if-present checkTypes && eslint . && stylelint **.css",
         "format": "eslint . --fix && stylelint --fix **.css",
         "version-seal": "cross-env ENABLE_VERSION_SEAL=true tsx packages/core/tools/set_version.ts"
     }

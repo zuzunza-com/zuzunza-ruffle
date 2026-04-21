@@ -16,18 +16,27 @@
         "url": "git+https://github.com/ruffle-rs/ruffle.git"
     },
     "scripts": {
-        "build": "webpack",
+        "build": "webpack && node ./scripts/obfuscate-ruffle-pro.mjs",
+        "build:webpack-only": "webpack",
         "serve": "webpack-dev-server",
         "wdio": "wdio run wdio.conf.ts",
         "checkTypes": "tsc --noemit"
     },
     "dependencies": {
-        "ruffle-core": "^0.1.0"
+        "ruffle-core": "workspace:*"
     },
     "devDependencies": {
+        "@tsconfig/strictest": "^2.0.8",
         "@types/chai": "^5.2.3",
         "@types/chai-html": "^3.0.0",
+        "@types/node": "^22.15.0",
+        "@wdio/globals": "^9.25.0",
+        "@wdio/mocha-framework": "^9.25.0",
+        "@wdio/types": "^9.25.0",
+        "copy-webpack-plugin": "^13.0.1",
+        "javascript-obfuscator": "^5.4.1",
         "json5": "^2.2.3",
+        "terser-webpack-plugin": "^5.4.0",
         "ts-node": "^10.9.2",
         "webpack": "^5.105.4",
         "webpack-cli": "^6.0.1",
