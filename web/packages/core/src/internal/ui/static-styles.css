@@ -416,6 +416,13 @@
     top: -100px;
     width: 1px;
     height: 1px;
+    font-size: 16px;
+    line-height: 1;
+    color: transparent;
+    caret-color: transparent;
+    background: transparent;
+    border: 0;
+    padding: 0;
 }
 
 .modal {
