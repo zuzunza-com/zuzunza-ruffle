@@ -7,20 +7,43 @@ import { Setup } from "ruffle-core";
  * Origin lock: production bundles should set `ZUZUNZA_RUFFLE_ALLOWED_ORIGINS` at webpack build time
  * (comma-separated `window.location.origin` values). Empty list = no check (developer convenience).
  */
-function assertZuzunzaOriginAllowed() {
-    let raw = "[]";
+function readAllowedOriginsList() {
+    let raw;
     try {
         raw =
             typeof __ZUZUNZA_ALLOWED_ORIGINS_JSON__ !== "undefined"
-                ? __ZUZUNZA_ALLOWED_ORIGINS_JSON__
+                ? String(__ZUZUNZA_ALLOWED_ORIGINS_JSON__)
                 : "[]";
     } catch {
-        raw = "[]";
+        return [];
     }
-    let allowed;
+    const trimmed = (raw || "").trim();
+    if (trimmed === "") {
+        return [];
+    }
+    let parsed;
     try {
-        allowed = JSON.parse(raw);
+        parsed = JSON.parse(trimmed);
     } catch {
+        return null;
+    }
+    if (Array.isArray(parsed)) {
+        return parsed;
+    }
+    if (typeof parsed === "string") {
+        try {
+            const again = JSON.parse(parsed);
+            return Array.isArray(again) ? again : [];
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+function assertZuzunzaOriginAllowed() {
+    const allowed = readAllowedOriginsList();
+    if (allowed == null) {
         console.warn("[zuzunza-ruffle] invalid __ZUZUNZA_ALLOWED_ORIGINS_JSON__, skipping origin lock");
         return;
     }

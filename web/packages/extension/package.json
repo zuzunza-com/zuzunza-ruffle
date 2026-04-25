@@ -24,6 +24,7 @@
         "@types/jsonwebtoken": "^9.0.10",
         "archiver": "^7.0.1",
         "json5": "^2.2.3",
+        "replace-in-file": "^8.4.0",
         "ts-loader": "^9.5.4",
         "typescript": "^5.9.3",
         "webpack-cli": "^6.0.1",

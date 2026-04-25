@@ -58,7 +58,14 @@ export default function (_env, _argv) {
         devtool: wantSourceMap ? "source-map" : false,
         plugins: [
             new webpack.DefinePlugin({
-                __ZUZUNZA_ALLOWED_ORIGINS_JSON__: JSON.stringify(allowedOriginsList),
+                /**
+                 * DefinePlugin 값은 번들에 그대로 끼워 넣는다.
+                 * `JSON.stringify([])` 만 쓰면 `[]` 가 **배열 리터럴**로 들어가 `JSON.parse` 가 깨진다.
+                 * 항상 **JSON 문자열 리터럴**이 되도록 이중 stringify.
+                 */
+                __ZUZUNZA_ALLOWED_ORIGINS_JSON__: JSON.stringify(
+                    JSON.stringify(allowedOriginsList),
+                ),
             }),
             new CopyPlugin({
                 patterns: [
