@@ -1,6 +1,7 @@
 import type { BaseLoadOptions } from "./load-options";
 import {
     AutoPlay,
+    BackgroundExecutionMode,
     ContextMenu,
     Letterbox,
     LogLevel,
@@ -61,4 +62,5 @@ export const DEFAULT_CONFIG: Required<BaseLoadOptions> = {
     zetencRadius: null,
     zetencSeed: null,
     brandingLock: false,
+    backgroundExecutionMode: BackgroundExecutionMode.MainThread,
 };

@@ -1,5 +1,5 @@
 use crate::avm1::globals::shared_object::{deserialize_value, serialize};
-use crate::avm1::property_decl::{DeclContext, StaticDeclarations, SystemClass};
+use crate::avm1::property_decl::{DeclContext, PropertyOrder, StaticDeclarations, SystemClass};
 use crate::avm1::{
     Activation, ActivationIdentifier, Error, ExecutionReason, NativeObject, Object, Value,
 };
@@ -167,7 +167,7 @@ pub fn create_class<'gc>(
     context: &mut DeclContext<'_, 'gc>,
     super_proto: Object<'gc>,
 ) -> SystemClass<'gc> {
-    let class = context.class(constructor, super_proto);
+    let class = context.class(constructor, super_proto, PropertyOrder::PrototypeFirst);
     context.define_properties_on(class.proto, PROTO_DECLS(context));
     class
 }
@@ -306,10 +306,10 @@ fn close<'gc>(
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Some(net_connection) = NetConnection::cast(this.into()) {
-        if let Some(previous_handle) = net_connection.set_handle(None) {
-            NetConnections::close(activation.context, previous_handle, true);
-        }
+    if let Some(net_connection) = NetConnection::cast(this.into())
+        && let Some(previous_handle) = net_connection.set_handle(None)
+    {
+        NetConnections::close(activation.context, previous_handle, true);
     }
     Ok(Value::Undefined)
 }
@@ -319,10 +319,7 @@ fn connect<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if matches!(
-        args.get(0),
-        None | Some(Value::Undefined) | Some(Value::Null)
-    ) {
+    if matches!(args.get(0), None | Some(Value::Undefined | Value::Null)) {
         NetConnections::connect_to_local(activation.context, this);
         return Ok(Value::Undefined);
     }

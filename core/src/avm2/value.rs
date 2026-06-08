@@ -11,7 +11,7 @@ use crate::avm2::object::{NamespaceObject, Object, TObject};
 use crate::avm2::property::Property;
 use crate::avm2::script::TranslationUnit;
 use crate::avm2::vtable::VTable;
-use crate::avm2::{Error, Multiname, Namespace};
+use crate::avm2::{Error, Multiname};
 use crate::ecma_conversions::{f64_to_wrapping_i32, f64_to_wrapping_u32};
 use crate::string::{AvmAtom, AvmString, WStr};
 use gc_arena::Collect;
@@ -143,17 +143,6 @@ impl From<i32> for Value<'_> {
 impl From<u32> for Value<'_> {
     #[inline(always)]
     fn from(value: u32) -> Self {
-        if let Some(value) = value.to_i32() {
-            Value::Integer(value)
-        } else {
-            Value::Number(value as f64)
-        }
-    }
-}
-
-impl From<usize> for Value<'_> {
-    #[inline(always)]
-    fn from(value: usize) -> Self {
         if let Some(value) = value.to_i32() {
             Value::Integer(value)
         } else {
@@ -505,12 +494,17 @@ pub fn abc_default_value<'gc>(
 }
 
 impl<'gc> Value<'gc> {
-    pub fn as_namespace(&self) -> Result<Namespace<'gc>, Error<'gc>> {
-        match self {
-            Value::Object(ns) => ns
-                .as_namespace()
-                .ok_or_else(|| "Expected Namespace, found Object".into()),
-            _ => Err(format!("Expected Namespace, found {self:?}").into()),
+    /// Do the best effort of converting the [`usize`] value to [`Value`].
+    ///
+    /// This is lossless on 32-bit architectures and for values less or equal to
+    /// 2^53. For values greater than that, it will return a value equivalent to
+    /// the closest integer representable as IEEE 754 64-bit.
+    #[inline(always)]
+    pub fn from_usize_lossy(value: usize) -> Self {
+        if let Some(value) = value.to_i32() {
+            Value::Integer(value)
+        } else {
+            Value::Number(value as f64)
         }
     }
 
@@ -953,7 +947,7 @@ impl<'gc> Value<'gc> {
         let vtable = self.vtable(activation);
 
         match vtable.get_trait(multiname) {
-            Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
+            Some(Property::Slot { slot_id } | Property::ConstSlot { slot_id }) => {
                 // Only objects can have slots
                 let object = self.as_object().unwrap();
 
@@ -1093,7 +1087,7 @@ impl<'gc> Value<'gc> {
             Some(Property::Virtual { set: Some(set), .. }) => {
                 self.call_method(set, &[value], activation).map(|_| ())
             }
-            Some(Property::ConstSlot { .. }) | Some(Property::Virtual { set: None, .. }) => {
+            Some(Property::ConstSlot { .. } | Property::Virtual { set: None, .. }) => {
                 let instance_class = self.instance_class(activation);
 
                 Err(error::make_reference_error(
@@ -1146,7 +1140,7 @@ impl<'gc> Value<'gc> {
         let vtable = self.vtable(activation);
 
         match vtable.get_trait(multiname) {
-            Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
+            Some(Property::Slot { slot_id } | Property::ConstSlot { slot_id }) => {
                 // Only objects can have slots
                 let object = self.as_object().unwrap();
 
@@ -1207,7 +1201,7 @@ impl<'gc> Value<'gc> {
         let vtable = self.vtable(activation);
 
         match vtable.get_trait(multiname) {
-            Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
+            Some(Property::Slot { slot_id } | Property::ConstSlot { slot_id }) => {
                 // Only objects can have slots
                 let object = self.as_object().unwrap();
 
@@ -1293,10 +1287,10 @@ impl<'gc> Value<'gc> {
     ) -> Result<Value<'gc>, Error<'gc>> {
         // TODO: Bound methods should be cached on the Method in a
         // WeakKeyHashMap<Value, FunctionObject>, not on the Object
-        if let Some(object) = self.as_object() {
-            if let Some(bound_method) = object.get_bound_method(id) {
-                return bound_method.call(activation, *self, arguments);
-            }
+        if let Some(object) = self.as_object()
+            && let Some(bound_method) = object.get_bound_method(id)
+        {
+            return bound_method.call(activation, *self, arguments);
         }
 
         let vtable = self.vtable(activation);
@@ -1383,7 +1377,7 @@ impl<'gc> Value<'gc> {
         let vtable = self.vtable(activation);
 
         match vtable.get_trait(multiname) {
-            Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
+            Some(Property::Slot { slot_id } | Property::ConstSlot { slot_id }) => {
                 // Only objects can have slots
                 let object = self.as_object().unwrap();
 
@@ -1488,10 +1482,10 @@ impl<'gc> Value<'gc> {
     ) -> bool {
         let name = Multiname::new(activation.avm2().find_public_namespace(), name);
 
-        if let Some(object) = self.as_object() {
-            if object.has_own_property(&name) {
-                return true;
-            }
+        if let Some(object) = self.as_object()
+            && object.has_own_property(&name)
+        {
+            return true;
         }
 
         if let Some(proto) = self.proto(activation) {
@@ -1513,9 +1507,11 @@ impl<'gc> Value<'gc> {
         receiver: Value<'gc>,
         args: FunctionArgs<'_, 'gc>,
     ) -> Result<Value<'gc>, Error<'gc>> {
-        match self.as_object() {
-            Some(Object::ClassObject(class_object)) => class_object.call(activation, args),
-            Some(Object::FunctionObject(function_object)) => {
+        match self {
+            Value::Object(o) if let Some(class_object) = o.as_class_object() => {
+                class_object.call(activation, args)
+            }
+            Value::Object(o) if let Some(function_object) = o.as_function_object() => {
                 function_object.call(activation, receiver, args)
             }
             _ => Err(make_error_1006(activation)),
@@ -1527,11 +1523,11 @@ impl<'gc> Value<'gc> {
         activation: &mut Activation<'_, 'gc>,
         args: FunctionArgs<'_, 'gc>,
     ) -> Result<Value<'gc>, Error<'gc>> {
-        match self.as_object() {
-            Some(Object::ClassObject(class_object)) => {
+        match self {
+            Value::Object(o) if let Some(class_object) = o.as_class_object() => {
                 class_object.construct_with_args(activation, args)
             }
-            Some(Object::FunctionObject(function_object)) => {
+            Value::Object(o) if let Some(function_object) = o.as_function_object() => {
                 function_object.construct(activation, args).map(Into::into)
             }
             _ => Err(make_error_1007(activation)),
@@ -1582,10 +1578,10 @@ impl<'gc> Value<'gc> {
             return Ok(*self);
         }
 
-        if let Some(object) = self.as_object() {
-            if object.is_of_type(class) {
-                return Ok(*self);
-            }
+        if let Some(object) = self.as_object()
+            && object.is_of_type(class)
+        {
+            return Ok(*self);
         }
 
         Err(make_error_1034(activation, *self, class))
@@ -1737,10 +1733,12 @@ impl<'gc> Value<'gc> {
         activation: &mut Activation<'_, 'gc>,
         class_or_function_object: Object<'gc>,
     ) -> bool {
-        let type_proto = match class_or_function_object {
-            Object::ClassObject(class_object) => Some(class_object.prototype()),
-            Object::FunctionObject(function_object) => function_object.prototype(),
-            _ => panic!("Object must be either ClassObject or FunctionObject"),
+        let type_proto = if let Some(class_object) = class_or_function_object.as_class_object() {
+            Some(class_object.prototype())
+        } else if let Some(function_object) = class_or_function_object.as_function_object() {
+            function_object.prototype()
+        } else {
+            panic!("Object must be either ClassObject or FunctionObject")
         };
 
         if let Some(type_proto) = type_proto {
@@ -1764,10 +1762,10 @@ impl<'gc> Value<'gc> {
             true
         } else {
             // TODO - this should apply to (Array/Vector).indexOf, and possibility more places as well
-            if let Some(xml1) = self.as_object().and_then(|obj| obj.as_xml_object()) {
-                if let Some(xml2) = other.as_object().and_then(|obj| obj.as_xml_object()) {
-                    return E4XNode::ptr_eq(xml1.node(), xml2.node());
-                }
+            if let Some(xml1) = self.as_object().and_then(|obj| obj.as_xml_object())
+                && let Some(xml2) = other.as_object().and_then(|obj| obj.as_xml_object())
+            {
+                return E4XNode::ptr_eq(xml1.node(), xml2.node());
             }
             false
         }
@@ -1796,20 +1794,22 @@ impl<'gc> Value<'gc> {
                 return xml_obj.abstract_eq(other, activation);
             }
 
-            if let Some(self_qname) = obj.as_qname_object() {
-                if let Value::Object(Object::QNameObject(other_qname)) = other {
-                    return Ok(self_qname.uri(activation.strings())
-                        == other_qname.uri(activation.strings())
-                        && self_qname.local_name(activation.strings())
-                            == other_qname.local_name(activation.strings()));
-                }
+            if let Some(self_qname) = obj.as_qname_object()
+                && let Value::Object(o) = other
+                && let Some(other_qname) = o.as_qname_object()
+            {
+                return Ok(self_qname.uri(activation.strings())
+                    == other_qname.uri(activation.strings())
+                    && self_qname.local_name(activation.strings())
+                        == other_qname.local_name(activation.strings()));
             }
 
-            if let Some(self_ns) = obj.as_namespace_object() {
-                if let Value::Object(Object::NamespaceObject(other_ns)) = other {
-                    return Ok(self_ns.namespace().as_uri(activation.strings())
-                        == other_ns.namespace().as_uri(activation.strings()));
-                }
+            if let Some(self_ns) = obj.as_namespace_object()
+                && let Value::Object(o) = other
+                && let Some(other_ns) = o.as_namespace_object()
+            {
+                return Ok(self_ns.namespace().as_uri(activation.strings())
+                    == other_ns.namespace().as_uri(activation.strings()));
             }
         }
 

@@ -355,7 +355,7 @@ impl<'gc> NetStream<'gc> {
     ///
     /// Externally visible AVM state must not be reinitialized here - i.e. the
     /// AS3 `client` doesn't go away because you played a new video file.
-    pub fn reset_buffer(self, context: &mut UpdateContext<'gc>) {
+    fn reset_buffer(self, context: &mut UpdateContext<'gc>) {
         if let Some(instance) = self.source().sound_instance.get() {
             // We stop the sound twice because sounds may have either been
             // played through the audio manager or through the backend directly
@@ -602,6 +602,8 @@ impl<'gc> NetStream<'gc> {
             };
             self.0.url.replace(Some(request.url().to_string()));
             self.source().preload_offset.set(0);
+            self.reset_buffer(context);
+
             let future = crate::loader::load_netstream(context, self, request);
 
             context.navigator.spawn_future(future);
@@ -923,11 +925,11 @@ impl<'gc> NetStream<'gc> {
         let buffer = slice.data();
 
         match (video_handle, codec, video_data.data) {
-            (maybe_video_handle, Some(codec), FlvVideoPacket::Data(mut data))
-            | (
+            (
                 maybe_video_handle,
                 Some(codec),
-                FlvVideoPacket::Vp6Data {
+                FlvVideoPacket::Data(mut data)
+                | FlvVideoPacket::Vp6Data {
                     hadjust: _,
                     vadjust: _,
                     mut data,
@@ -1290,13 +1292,16 @@ impl<'gc> NetStream<'gc> {
                 );
             }
 
-            self.trigger_status_event(
-                context,
-                [("code", "NetStream.Buffer.Empty"), ("level", "status")],
-            );
+            // Check if AVM code in the event handler invoked stream.play() and replaced the source.
+            if Gc::ptr_eq(source, self.source()) {
+                self.trigger_status_event(
+                    context,
+                    [("code", "NetStream.Buffer.Empty"), ("level", "status")],
+                );
 
-            if is_end_of_video {
-                self.pause(context, false);
+                if is_end_of_video {
+                    self.pause(context, false);
+                }
             }
         }
 

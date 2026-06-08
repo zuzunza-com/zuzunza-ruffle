@@ -5,10 +5,10 @@ use std::cell::{Cell, RefCell};
 use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
 use crate::avm1::globals::as_broadcaster::BroadcasterFunctions;
-use crate::avm1::property_decl::{DeclContext, StaticDeclarations, SystemClass};
+use crate::avm1::property_decl::{DeclContext, PropertyOrder, StaticDeclarations, SystemClass};
 use crate::avm1::{NativeObject, Object, Value};
 use crate::avm1_stub;
-use crate::backend::ui::{FileDialogResult, FileFilter};
+use crate::backend::ui::{FileDialogSelection, FileFilter};
 use crate::string::AvmString;
 use gc_arena::barrier::unlock;
 use gc_arena::lock::Lock;
@@ -21,10 +21,10 @@ use url::Url;
 pub struct FileReferenceObject<'gc>(Gc<'gc, FileReferenceData<'gc>>);
 
 impl<'gc> FileReferenceObject<'gc> {
-    pub fn init_from_dialog_result(
+    pub fn init_from_file_selection(
         self,
         activation: &mut Activation<'_, 'gc>,
-        result: &dyn FileDialogResult,
+        result: &dyn FileDialogSelection,
     ) {
         let mc = activation.gc();
         let write = Gc::write(mc, self.0);
@@ -32,28 +32,28 @@ impl<'gc> FileReferenceObject<'gc> {
         self.0.is_initialised.set(true);
 
         let date_proto = activation.prototypes().date_constructor;
-        if let Some(creation_time) = result.creation_time() {
-            if let Ok(Value::Object(obj)) = date_proto.construct(
+        if let Some(creation_time) = result.creation_time()
+            && let Ok(Value::Object(obj)) = date_proto.construct(
                 activation,
                 &[(creation_time.timestamp_millis() as f64).into()],
-            ) {
-                unlock!(write, FileReferenceData, creation_date).set(Some(obj));
-            }
+            )
+        {
+            unlock!(write, FileReferenceData, creation_date).set(Some(obj));
         }
 
-        if let Some(modification_time) = result.modification_time() {
-            if let Ok(Value::Object(obj)) = date_proto.construct(
+        if let Some(modification_time) = result.modification_time()
+            && let Ok(Value::Object(obj)) = date_proto.construct(
                 activation,
                 &[(modification_time.timestamp_millis() as f64).into()],
-            ) {
-                unlock!(write, FileReferenceData, modification_date).set(Some(obj));
-            }
+            )
+        {
+            unlock!(write, FileReferenceData, modification_date).set(Some(obj));
         }
 
         let file_type = result.file_type().map(|s| AvmString::new_utf8(mc, s));
         unlock!(write, FileReferenceData, file_type).set(file_type);
 
-        let file_name = result.file_name().map(|s| AvmString::new_utf8(mc, s));
+        let file_name = Some(AvmString::new_utf8(mc, result.file_name()));
         unlock!(write, FileReferenceData, name).set(file_name);
 
         let creator = result.creator().map(|s| AvmString::new_utf8(mc, s));
@@ -105,7 +105,7 @@ pub fn create_class<'gc>(
     broadcaster_fns: BroadcasterFunctions<'gc>,
     array_proto: Object<'gc>,
 ) -> SystemClass<'gc> {
-    let class = context.class(constructor, super_proto);
+    let class = context.class(constructor, super_proto, PropertyOrder::PrototypeLast);
     context.define_properties_on(class.proto, PROTO_DECLS(context));
     broadcaster_fns.initialize(context.strings, class.proto, array_proto);
     context.define_properties_on(class.constr, OBJECT_DECLS(context));
@@ -201,7 +201,7 @@ pub fn size<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let NativeObject::FileReference(file_ref) = this.native() {
         let size = file_ref.0.size.get();
-        return Ok(size.map_or(Value::Undefined, Into::into));
+        return Ok(size.map_or(Value::Undefined, Value::from_u64_lossy));
     }
 
     Ok(Value::Undefined)

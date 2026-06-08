@@ -526,7 +526,7 @@ impl RuffleInstanceBuilder {
         )))]
         std::compile_error!("You must enable one of the render backend features (e.g., webgl).");
 
-        let _is_transparent = self.wmode.as_deref() == Some("transparent");
+        let is_transparent = self.wmode.as_deref() == Some("transparent");
 
         let mut renderer_list = vec!["wgpu-webgl", "webgpu", "webgl", "canvas"];
         if let Some(preferred_renderer) = &self.preferred_renderer {
@@ -608,7 +608,7 @@ impl RuffleInstanceBuilder {
                         .map_err(|_| "Expected HtmlCanvasElement")?;
                     match ruffle_render_webgl::WebGlRenderBackend::new(
                         &canvas,
-                        _is_transparent,
+                        is_transparent,
                         self.quality,
                     ) {
                         Ok(renderer) => {
@@ -627,10 +627,8 @@ impl RuffleInstanceBuilder {
                         .into_js_result()?
                         .dyn_into()
                         .map_err(|_| "Expected HtmlCanvasElement")?;
-                    match ruffle_render_canvas::WebCanvasRenderBackend::new(
-                        &canvas,
-                        _is_transparent,
-                    ) {
+                    match ruffle_render_canvas::WebCanvasRenderBackend::new(&canvas, is_transparent)
+                    {
                         Ok(renderer) => {
                             return Ok((Box::new(renderer), canvas));
                         }
