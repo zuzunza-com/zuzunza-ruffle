@@ -1,0 +1,136 @@
+name: Deploy Ruffle
+
+on:
+  push:
+    branches: [zuzunza/develop]
+  workflow_dispatch:
+
+concurrency:
+  group: zuzunza-ruffle-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RUFFLE_DEST: /srv/appdata/zuzunza/dist/external/superkomi/main/ruffle
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: zuzunza-ruffle-deploy
+
+      - name: Install wasm-bindgen
+        run: cargo install wasm-bindgen-cli --version 0.2.120
+
+      - name: Install wasm-opt
+        uses: sigoden/install-binary@v1
+        with:
+          repo: WebAssembly/binaryen
+          tag: version_129
+          name: wasm-opt
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@10.32.1 --activate
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build selfhosted bundle (webpack + Obfuscator.io Pro VM)
+        working-directory: web
+        env:
+          OBFUSCATOR_API_TOKEN: ${{ secrets.OBFUSCATOR_API_TOKEN }}
+          ZUZUNZA_OBFUSCATOR_IO_TOKEN: ${{ secrets.OBFUSCATOR_API_TOKEN }}
+          ZUZUNZA_RUFFLE_ALLOWED_ORIGINS: ${{ vars.ZUZUNZA_RUFFLE_ALLOWED_ORIGINS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OBFUSCATOR_API_TOKEN:-}" ]; then
+            echo "ERROR: OBFUSCATOR_API_TOKEN secret is required for production deploy." >&2
+            exit 1
+          fi
+          export ZUZUNZA_RUFFLE_ALLOWED_ORIGINS="${ZUZUNZA_RUFFLE_ALLOWED_ORIGINS:-https://www.zuzunza.com,https://kidszzanggame.com,https://studio.zuzunza.com}"
+          pnpm run build --filter ruffle-core
+          pnpm run build --filter ruffle-selfhosted
+          test -f packages/selfhosted/dist/ruffle.js
+
+      - name: Package bundle
+        run: tar -czf ruffle-bundle.tgz -C web/packages/selfhosted/dist .
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruffle-selfhosted-bundle
+          path: ruffle-bundle.tgz
+          if-no-files-found: error
+          retention-days: 3
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ruffle-selfhosted-bundle
+
+      - name: Copy bundle to server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 4096
+          source: ruffle-bundle.tgz
+          target: /tmp
+
+      - name: Install bundle on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 4096
+          script: |
+            set -euo pipefail
+            TARBALL="/tmp/ruffle-bundle.tgz"
+            DEST="${{ env.RUFFLE_DEST }}"
+            TMP="${DEST}.tmp.$$"
+            if [ ! -f "$TARBALL" ]; then
+              echo "ERROR: missing $TARBALL" >&2
+              exit 1
+            fi
+            install -d "$(dirname "$DEST")"
+            rm -rf "$TMP"
+            mkdir -p "$TMP"
+            tar -xzf "$TARBALL" -C "$TMP"
+            test -f "${TMP}/ruffle.js"
+            rm -rf "${DEST}.bak"
+            if [ -d "$DEST" ]; then mv "$DEST" "${DEST}.bak"; fi
+            mv "$TMP" "$DEST"
+            rm -rf "${DEST}.bak"
+            rm -f "$TARBALL"
+            ls -la "${DEST}/ruffle.js"
+
+      - name: Healthcheck ruffle.js
+        run: |
+          curl -fsS --max-time 30 \
+            "https://www.zuzunza.com/player/wasm/ruffle/ruffle.js" \
+            | head -c 64 | grep -q .
