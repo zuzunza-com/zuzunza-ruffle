@@ -14,6 +14,9 @@ permissions:
 
 env:
   RUFFLE_DEST: /srv/appdata/zuzunza/dist/external/superkomi/main/ruffle
+  # SSH listens on Tailscale only (127.0.0.1 + 100.99.5.48:4096), not public IP.
+  DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_TAILSCALE_HOST || '100.99.5.48' }}
+  DEPLOY_SSH_PORT: "4096"
 
 jobs:
   build:
@@ -88,23 +91,31 @@ jobs:
         with:
           name: ruffle-selfhosted-bundle
 
+      - name: Connect Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          tags: tag:ci
+          ping: ${{ env.DEPLOY_SSH_HOST }}
+
       - name: Copy bundle to server
         uses: appleboy/scp-action@v1.0.0
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
+          host: ${{ env.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 4096
+          port: ${{ env.DEPLOY_SSH_PORT }}
           source: ruffle-bundle.tgz
           target: /tmp
 
       - name: Install bundle on server
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
+          host: ${{ env.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 4096
+          port: ${{ env.DEPLOY_SSH_PORT }}
           script: |
             set -euo pipefail
             TARBALL="/tmp/ruffle-bundle.tgz"
