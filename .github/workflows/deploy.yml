@@ -52,7 +52,7 @@ jobs:
         working-directory: web
         run: pnpm install --frozen-lockfile
 
-      - name: Build selfhosted bundle (webpack + Obfuscator.io Pro VM)
+      - name: Build selfhosted bundle (webpack + obfuscation)
         working-directory: web
         env:
           OBFUSCATOR_API_TOKEN: ${{ secrets.OBFUSCATOR_API_TOKEN }}
@@ -60,14 +60,11 @@ jobs:
           ZUZUNZA_RUFFLE_ALLOWED_ORIGINS: ${{ vars.ZUZUNZA_RUFFLE_ALLOWED_ORIGINS }}
         run: |
           set -euo pipefail
-          if [ -z "${OBFUSCATOR_API_TOKEN:-}" ]; then
-            echo "ERROR: OBFUSCATOR_API_TOKEN secret is required for production deploy." >&2
-            exit 1
-          fi
           export ZUZUNZA_RUFFLE_ALLOWED_ORIGINS="${ZUZUNZA_RUFFLE_ALLOWED_ORIGINS:-https://www.zuzunza.com,https://kidszzanggame.com,https://studio.zuzunza.com}"
           pnpm run build --filter ruffle-core
           pnpm run build --filter ruffle-selfhosted
           test -f packages/selfhosted/dist/ruffle.js
+          # Pro VM API unavailable on current plan → obfuscate-ruffle-pro.mjs uses local fallback in CI
 
       - name: Package bundle
         run: tar -czf ruffle-bundle.tgz -C web/packages/selfhosted/dist .

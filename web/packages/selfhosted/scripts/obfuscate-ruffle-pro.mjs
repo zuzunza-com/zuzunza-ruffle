@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Obfuscator.io Pro — VM 난독화 (webpack 번들 산출물에만 적용).
- * 토큰이 없으면 아무 것도 하지 않고 종료(로컬 빌드 호환).
+ * Pro API 실패 시 로컬 javascript-obfuscator 로 폴백(CI/배포 호환).
+ * 토큰이 없고 CI가 아니면 난독화 생략(로컬 개발).
  *
  * @see https://obfuscator.io/docs/vm-obfuscation
  * @see https://obfuscator.io/docs/api
@@ -10,6 +11,7 @@
  * - OBFUSCATOR_API_TOKEN (공식) 또는 ZUZUNZA_OBFUSCATOR_IO_TOKEN (별칭)
  * - ZUZUNZA_OBFUSCATOR_VM_JSON: 추가/덮어쓸 옵션 JSON (선택)
  * - ZUZUNZA_OBFUSCATOR_VM_SELF_DEFENDING=1: vmSelfDefending + vmDebugProtection (헤드리스/자동화 테스트 깨질 수 있음)
+ * - ZUZUNZA_OBFUSCATOR_FORCE_LOCAL=1: Pro API 건너뛰고 로컬 난독화만 사용
  */
 import fs from "fs";
 import path from "path";
@@ -24,7 +26,10 @@ const token =
     process.env.ZUZUNZA_OBFUSCATOR_IO_TOKEN?.trim() ||
     "";
 
-if (!token) {
+const forceLocal = process.env.ZUZUNZA_OBFUSCATOR_FORCE_LOCAL === "1";
+const useLocalInCi = process.env.CI === "true";
+
+if (!token && !forceLocal && !useLocalInCi) {
     console.warn(
         "[zuzunza-ruffle] obfuscate-pro: API 토큰 없음 (OBFUSCATOR_API_TOKEN) — VM 난독화 생략.",
     );
@@ -56,6 +61,61 @@ const baseVmOptions = {
 
 const vmOptions = { ...baseVmOptions, ...loadExtraVmOptions() };
 
+const localOptions = {
+    compact: true,
+    controlFlowFlattening: true,
+    controlFlowFlatteningThreshold: 0.5,
+    deadCodeInjection: false,
+    debugProtection: false,
+    identifierNamesGenerator: "hexadecimal",
+    log: false,
+    renameGlobals: false,
+    rotateStringArray: true,
+    selfDefending: false,
+    stringArray: true,
+    stringArrayThreshold: 0.75,
+    unicodeEscapeSequence: false,
+};
+
+function shouldFallbackToLocal(error) {
+    const message = String(error?.message ?? error ?? "");
+    return (
+        message.includes("API access is not available") ||
+        message.includes("upgrade to use the API") ||
+        message.includes("ApiError")
+    );
+}
+
+function obfuscateLocal(code) {
+    return JavaScriptObfuscator.obfuscate(code, localOptions).getObfuscatedCode();
+}
+
+async function obfuscateFile(code, name) {
+    if (!forceLocal && token) {
+        try {
+            const result = await JavaScriptObfuscator.obfuscatePro(
+                code,
+                vmOptions,
+                { apiToken: token },
+            );
+            return { output: result.getObfuscatedCode(), mode: "pro-vm" };
+        } catch (error) {
+            if (!shouldFallbackToLocal(error)) {
+                throw error;
+            }
+            console.warn(
+                `[zuzunza-ruffle] obfuscate-pro VM unavailable for ${name}: ${error.message}`,
+            );
+            console.warn(
+                "[zuzunza-ruffle] falling back to local javascript-obfuscator",
+            );
+        }
+    }
+
+    const output = obfuscateLocal(code);
+    return { output, mode: "local" };
+}
+
 async function main() {
     if (!fs.existsSync(distDir)) {
         console.error("[zuzunza-ruffle] dist/ 없음 — 먼저 webpack을 실행하세요.");
@@ -75,17 +135,14 @@ async function main() {
         const code = fs.readFileSync(fp, "utf8");
         const sizeKb = (code.length / 1024).toFixed(1);
         process.stdout.write(
-            `[zuzunza-ruffle] obfuscate-pro VM: ${name} (${sizeKb} KiB) ... `,
+            `[zuzunza-ruffle] obfuscate: ${name} (${sizeKb} KiB) ... `,
         );
         const t0 = Date.now();
         try {
-            const result = await JavaScriptObfuscator.obfuscatePro(
-                code,
-                vmOptions,
-                { apiToken: token },
-            );
-            fs.writeFileSync(fp, result.getObfuscatedCode());
-            console.log(`ok (${Date.now() - t0} ms)`);
+            const { output, mode } = await obfuscateFile(code, name);
+            fs.writeFileSync(fp, output);
+            const outKb = (output.length / 1024).toFixed(1);
+            console.log(`ok [${mode}] (${Date.now() - t0} ms, ${outKb} KiB)`);
         } catch (e) {
             console.log("FAILED");
             console.error(e);
