@@ -436,6 +436,7 @@ impl NavigatorBackend for WebNavigatorBackend {
                 response,
                 body_stream: None,
                 zetenc,
+                decrypted_state: Rc::new(RefCell::new(DecryptedState::Unread)),
             });
 
             Ok(wrapper)
@@ -584,11 +585,18 @@ impl NavigatorBackend for WebNavigatorBackend {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DecryptedState {
+    Unread,
+    Done,
+}
+
 struct WebResponseWrapper {
     rewritten_url: Option<String>,
     response: WebResponse,
     body_stream: Option<Rc<RefCell<ReadableStream>>>,
     zetenc: Option<Arc<(f64, String)>>,
+    decrypted_state: Rc<RefCell<DecryptedState>>,
 }
 
 impl SuccessResponse for WebResponseWrapper {
@@ -651,6 +659,57 @@ impl SuccessResponse for WebResponseWrapper {
 
     #[expect(clippy::await_holding_refcell_ref)]
     fn next_chunk(&mut self) -> OwnedFuture<Option<Vec<u8>>, Error> {
+        if self.zetenc.is_some() {
+            let decrypted_state = self.decrypted_state.clone();
+            let response = match self.response.clone() {
+                Ok(r) => r,
+                Err(_) => {
+                    return Box::pin(async move {
+                        Err(Error::FetchError("Could not clone response".to_string()))
+                    });
+                }
+            };
+            let zetenc = self.zetenc.clone();
+
+            return Box::pin(async move {
+                let mut state = decrypted_state.try_borrow_mut().map_err(|_| {
+                    Error::FetchError(
+                        "Concurrent read operations on the same stream are not supported.".to_string(),
+                    )
+                })?;
+                match *state {
+                    DecryptedState::Unread => {
+                        *state = DecryptedState::Done;
+                        let body_promise = response
+                            .array_buffer()
+                            .map_err(|_| Error::FetchError("Got JS error".to_string()))?;
+                        let body_val = JsFuture::from(body_promise)
+                            .await
+                            .map_err(|_| {
+                                Error::FetchError("Could not allocate array buffer for response".to_string())
+                            })?;
+                        let body_array = body_val
+                            .dyn_into::<js_sys::ArrayBuffer>()
+                            .map_err(|_| {
+                                Error::FetchError("array_buffer result wasn't an ArrayBuffer".to_string())
+                            })?;
+                        let mut body = Uint8Array::new(&body_array).to_vec();
+
+                        if let Some(ref cfg) = zetenc {
+                            match zuzunza_zetenc::decrypt_if_zet(&body, cfg.0, &cfg.1) {
+                                Ok(b) => body = b,
+                                Err(e) => {
+                                    return Err(Error::FetchError(format!("ZetEnc decrypt failed: {e}")));
+                                }
+                            }
+                        }
+                        Ok(Some(body))
+                    }
+                    DecryptedState::Done => Ok(None),
+                }
+            });
+        }
+
         if self.body_stream.is_none() {
             let body = self.response.body();
             if body.is_none() {
